@@ -1,0 +1,35 @@
+name: Build and Update GitOps
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: Build and Push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: yourdockerhub/nginx-site:${{ github.sha }},yourdockerhub/nginx-site:latest
+    
+    - name: Update GitOps Repo
+      run: |
+        git clone https://github.com/yourorg/gitops-manifests.git
+        cd gitops-manifests
+        sed -i 's|image: .*|image: yourdockerhub/nginx-site:${{ github.sha }}|' manifests/deployment.yaml
+        git config user.name "GitHub Action"
+        git config user.email "action@github.com"
+        git add .
+        git commit -m "Update image to ${{ github.sha }}"
+        git push https://${{ secrets.GITOPS_TOKEN }}@github.com/yourorg/gitops-manifests.git HEAD:main
+      env:
+        GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
